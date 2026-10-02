@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thinkorswim 觀察面板設計整理</title>
+<style>
+:root{--bg:#0b0f14;--panel:#111821;--text:#e8eef5;--muted:#9eabb8;--line:#263241;--green:#52d273;--red:#ff6b6b;--accent:#65b7ff;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;line-height:1.7;}
+main{max-width:1080px;margin:0 auto;padding:44px 24px 72px}
+h1{font-size:2rem;margin:0 0 10px}
+h2{margin-top:38px;padding-bottom:8px;border-bottom:1px solid var(--line);font-size:1.35rem}
+h3{margin-top:26px;font-size:1.08rem;color:#f5f8fb}
+p,li{color:#dbe4ec}
+.lead{color:var(--muted);font-size:1.03rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:18px 0;}
+.path{font-family:Consolas,Monaco,monospace;background:#0a1118;border:1px solid var(--line);padding:14px 16px;border-radius:10px;color:#fff;}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:var(--panel)}
+th,td{border:1px solid var(--line);padding:11px 12px;text-align:left;vertical-align:top}
+th{background:#17212c;color:#fff}
+code{font-family:Consolas,Monaco,monospace}
+pre{overflow:auto;background:#070b10;border:1px solid var(--line);border-radius:10px;padding:16px;color:#d7e3ef;}
+.good{color:var(--green);font-weight:700}
+.bad{color:var(--red);font-weight:700}
+.accent{color:var(--accent);font-weight:700}
+.note{color:var(--muted);font-size:.94rem}
+.kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:20px 0}
+.kpi div{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.kpi strong{display:block;font-size:1.05rem;margin-bottom:6px}
+@media(max-width:760px){.kpi{grid-template-columns:1fr}table{font-size:.92rem}}
+</style>
+</head>
+<body>
+<main>
+<h1>Thinkorswim 觀察面板設計整理</h1>
+<p class="lead">核心目的：把美股 equity 的「昨收 → 今日開盤 → 現在」拆成可直接判讀的三段價格行為。</p>
+
+<div class="kpi">
+  <div><strong>Gap%</strong><span>昨收 → 今日開盤</span></div>
+  <div><strong>%FromOpen</strong><span>今日開盤 → 現在</span></div>
+  <div><strong>RTH %變動</strong><span>昨收 → 現在</span></div>
+</div>
+
+<h2>1. 設計目的</h2>
+<p>這套觀察面板不是只問「今天漲多少」，而是進一步區分：開盤前市場已經完成多少重新定價，以及 09:30 開盤之後真正的買賣方向。</p>
+<div class="path">昨日收盤 → 今日開盤 → 最新價</div>
+
+<h2>2. 最終欄位配置</h2>
+<table>
+<tr><th>欄位</th><th>計算方式</th><th>用途</th></tr>
+<tr><td><code>Gap%</code></td><td>(今日開盤 - 昨收) / 昨收 × 100%</td><td>隔夜 / 盤前造成的跳空</td></tr>
+<tr><td><code>最新價</code></td><td>Current / Last Price</td><td>目前成交價格</td></tr>
+<tr><td><code>FromOpen</code></td><td>最新價 - 今日開盤</td><td>開盤後漲跌多少美元</td></tr>
+<tr><td><code>RTH 淨變動</code></td><td>最新價 - 前一個 RTH 收盤價</td><td>相對昨收的美元變動</td></tr>
+<tr><td><code>%FromOpen</code></td><td>(最新價 - 今日開盤) / 今日開盤 × 100%</td><td>開盤後真正的漲跌幅</td></tr>
+<tr><td><code>RTH %變動</code></td><td>(最新價 - 前一個 RTH 收盤價) / 前一個 RTH 收盤價 × 100%</td><td>相對昨收的總漲跌幅</td></tr>
+</table>
+
+<h2>3. 三個核心百分比的差別</h2>
+<div class="card">
+<p>假設：昨收 <b>100</b>、今日開盤 <b>105</b>、現在 <b>103</b>。</p>
+<p><span class="accent">Gap% = +5.00%</span>：開盤前市場已經先把價格往上重定價。</p>
+<p><span class="bad">%FromOpen ≈ -1.90%</span>：09:30 開盤後其實是在下跌。</p>
+<p><span class="good">RTH %變動 = +3.00%</span>：相對昨收仍然上漲。</p>
+</div>
+
+<h2>4. 為什麼 %FromOpen 對 RTH 交易特別重要</h2>
+<p>一般的 <code>% Change / RTH %變動</code> 以昨收為基準，因此會把「隔夜 / 盤前 Gap」和「09:30 開盤後的盤中走勢」混在一起。若交易者主要在 RTH 才執行交易，<code>%FromOpen</code> 更接近真正可交易區間的價格行為。</p>
+<p>例如昨收 100、開盤 110、現在 108：<code>RTH %變動 = +8%</code>，但 <code>%FromOpen ≈ -1.82%</code>。也就是說今天仍大漲，但開盤後其實在被賣。</p>
+
+<h2>5. Gap% × %FromOpen 的判讀</h2>
+<table>
+<tr><th>Gap%</th><th>%FromOpen</th><th>常見解讀</th></tr>
+<tr><td class="good">+</td><td class="good">+</td><td>高開後續強，continuation</td></tr>
+<tr><td class="good">+</td><td class="bad">-</td><td>高開後被賣，fade / rejection</td></tr>
+<tr><td class="bad">-</td><td class="good">+</td><td>低開後反彈，reversal</td></tr>
+<tr><td class="bad">-</td><td class="bad">-</td><td>低開後續弱，continuation lower</td></tr>
+</table>
+
+<h2>6. 數學關係</h2>
+<div class="card">
+<p><code>(1 + RTH Return) = (1 + Gap Return) × (1 + FromOpen Return)</code></p>
+<p class="note">漲跌幅較小時，可以粗略理解為 RTH Return ≈ Gap Return + FromOpen Return。</p>
+</div>
+
+<h2>7. Thinkorswim 自訂欄位</h2>
+
+<h3>A. FromOpen</h3>
+<pre><code>def spot = close;
+def dayOpen = open(period = AggregationPeriod.DAY);
+
+plot Diff = spot - dayOpen;
+
+Diff.AssignValueColor(
+    if Diff &gt; 0 then Color.GREEN
+    else if Diff &lt; 0 then Color.RED
+    else Color.GRAY
+);</code></pre>
+
+<h3>B. %FromOpen</h3>
+<pre><code>def spot = close;
+def dayOpen = open(period = AggregationPeriod.DAY);
+
+def pct = (spot - dayOpen) / dayOpen * 100;
+
+AddLabel(
+    yes,
+    if pct &gt; 0 then "+" + AsText(pct, "%1$.2f") + "%"
+    else AsText(pct, "%1$.2f") + "%",
+    if pct &gt; 0 then Color.GREEN
+    else if pct &lt; 0 then Color.RED
+    else Color.GRAY
+);</code></pre>
+<p class="note">使用 AddLabel() 後會偏向文字輸出；如果主要用途是排序，建議另保留純數值版本。</p>
+
+<h3>C. Gap%</h3>
+<pre><code>def dayOpen = open(period = AggregationPeriod.DAY);
+def prevClose = close(period = AggregationPeriod.DAY)[1];
+
+def gapPct = (dayOpen - prevClose) / prevClose * 100;
+
+AddLabel(
+    yes,
+    if gapPct &gt; 0 then "+" + AsText(gapPct, "%1$.2f") + "%"
+    else AsText(gapPct, "%1$.2f") + "%",
+    if gapPct &gt; 0 then Color.GREEN
+    else if gapPct &lt; 0 then Color.RED
+    else Color.GRAY
+);</code></pre>
+
+<h2>8. 最終觀察面板邏輯</h2>
+<div class="path">代號 | Gap% | 最新價 | FromOpen | RTH 淨變動 | %FromOpen | RTH %變動</div>
+<ol>
+<li><b>Gap%</b>：開盤前市場做了什麼</li>
+<li><b>最新價</b>：現在價格在哪</li>
+<li><b>FromOpen</b>：開盤後漲跌多少美元</li>
+<li><b>%FromOpen</b>：開盤後實際漲跌多少百分比</li>
+<li><b>RTH 淨變動</b>：相對昨收漲跌多少美元</li>
+<li><b>RTH %變動</b>：相對昨收今天總共漲跌多少</li>
+</ol>
+
+<h2>9. 核心用途</h2>
+<p>這套設計的核心不是單純看「今天誰漲最多」，而是把價格行為拆開，辨認：</p>
+<ul>
+<li>隔夜已經大漲，但開盤後轉弱</li>
+<li>隔夜沒什麼動，但開盤後大量買盤湧入</li>
+<li>高開後繼續加速</li>
+<li>低開後被快速承接</li>
+<li>低開後繼續走弱</li>
+</ul>
+<p>如果主要在 RTH 執行交易，<code>%FromOpen</code> 可以作為判斷「開盤後真正相對強弱」的核心欄位。</p>
+
+</main>
+</body>
+</html>
